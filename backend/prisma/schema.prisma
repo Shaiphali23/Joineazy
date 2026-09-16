@@ -1,0 +1,115 @@
+// Joineazy Task 1 — Student, Group & Assignment Management System
+// Domain decisions encoded here are documented in /CONTEXT.md and /docs/adr.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum Audience {
+  ALL
+  SPECIFIC
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+
+  // A student belongs to at most ONE group (exclusive membership).
+  membership       GroupMember?
+  createdGroups    Group[]       @relation("GroupCreator")
+  createdAssignments Assignment[] @relation("AssignmentAuthor")
+  confirmedSubmissions Submission[] @relation("ConfirmedBy")
+
+  @@map("users")
+}
+
+model Group {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdBy String
+  createdAt DateTime @default(now())
+
+  creator     User         @relation("GroupCreator", fields: [createdBy], references: [id])
+  members     GroupMember[]
+  submissions Submission[]
+  targetedBy  AssignmentGroup[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  userId   String   @unique // EXCLUSIVE: a student can be in only one group at a time
+  joinedAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("group_members")
+}
+
+model Assignment {
+  id           String   @id @default(uuid())
+  title        String
+  description  String
+  dueDate      DateTime
+  oneDriveLink String
+  audience     Audience @default(ALL)
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author        User              @relation("AssignmentAuthor", fields: [createdBy], references: [id])
+  targetGroups  AssignmentGroup[] // only meaningful when audience = SPECIFIC
+  submissions   Submission[]
+
+  @@map("assignments")
+}
+
+// Join table used ONLY when assignment.audience = SPECIFIC.
+// When audience = ALL, the target set is resolved dynamically at query time
+// so that groups formed AFTER the assignment was posted are still included.
+model AssignmentGroup {
+  assignmentId String
+  groupId      String
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([assignmentId, groupId])
+  @@map("assignment_groups")
+}
+
+// Submission is a GROUP act: exactly one row per (group, assignment).
+// confirmedBy records WHICH member performed the two-step confirmation.
+model Submission {
+  id           String   @id @default(uuid())
+  groupId      String
+  assignmentId String
+  confirmedBy  String
+  confirmedAt  DateTime @default(now())
+
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  confirmer  User       @relation("ConfirmedBy", fields: [confirmedBy], references: [id])
+
+  @@unique([groupId, assignmentId])
+  @@index([assignmentId])
+  @@map("submissions")
+}
