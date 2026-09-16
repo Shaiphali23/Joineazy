@@ -1,4 +1,4 @@
-# Joineazy — Student, Group & Assignment Management System
+# Joineazy Assignment — Student, Group & Assignment Management System
 
 A web app with two kinds of users.
 
