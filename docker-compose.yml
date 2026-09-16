@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: joineazy-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: joineazy
+      POSTGRES_PASSWORD: joineazy
+      POSTGRES_DB: joineazy
+    ports:
+      - "5433:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U joineazy -d joineazy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: joineazy-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://joineazy:joineazy@db:5432/joineazy?schema=public
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_EXPIRES_IN: 24h
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    container_name: joineazy-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  dbdata:
